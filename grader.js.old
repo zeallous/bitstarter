@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env gnode
 /*
 Automatically grade files for the presence of specified HTML tags/attributes.
 Uses commander.js and cheerio. Teaches command line application development
@@ -22,22 +22,39 @@ References:
 */
 
 var fs = require('fs');
-var rest = require('restler');
 var program = require('commander');
 var cheerio = require('cheerio');
 var HTMLFILE_DEFAULT = "index.html";
 var CHECKSFILE_DEFAULT = "checks.json";
-var TMPHTMLFILE_DEFAULT = "tmp.html";
-var URL_DEFAULT = "http://dry-wave-7782.herokuapp.com/";
+var URL_DEFAULT = "http://dry-wave-7782.herokuapp.com"; 
+//var TEMPHTMLFILE_DEFAULT = "tmp.html";
+
+var sys = require('util');
+var rest = require('restler');
 
 
 var assertFileExists = function(infile) {
     var instr = infile.toString();
     if(!fs.existsSync(instr)) {
         console.log("%s does not exist. Exiting.", instr);
-        process.exit(1); 
+        process.exit(1); // http://nodejs.org/api/process.html#process_process_exit_code
     }
     return instr;
+};
+
+var urlHTMLFile = function(url) {
+    rest.get(url).on('complete', function(result) {
+      if(result instanceof Error) {
+        sys.puts('Error: ' + result.message);
+        this.retry(5000);	  
+      }	else {
+        return fs.writeFileSync(TEMPHTMLFILE_DEFAULT, result);	  
+      }
+    }
+};
+
+var cheerioURLFile = function(url) {
+    return cheerio.load(urlHTMLFile(url));
 };
 
 var cheerioHtmlFile = function(htmlfile) {
@@ -59,25 +76,19 @@ var checkHtmlFile = function(htmlfile, checksfile) {
     return out;
 };
 
-var writeURLToTmp = function(url) {
-    rest.get(url).on('complete', function(result) {
-	fs.writeFileSync("tmp.html",result);
-    });
-};
-
 var clone = function(fn) {
-   return fn.bind({});
+    // Workaround for commander.js issue.
+    // http://stackoverflow.com/a/6772648
+    return fn.bind({});
 };
 
 if(require.main == module) {
     program
         .option('-c, --checks <check_file>', 'Path to checks.json', clone(assertFileExists), CHECKSFILE_DEFAULT)
         .option('-f, --file <html_file>', 'Path to index.html', clone(assertFileExists), HTMLFILE_DEFAULT)
-        .option('-u, --url <url_file>', 'Path to url', TMPHTMLFILE_DEFAULT)  
+        .option('-u --url <url_file>', 'Path to tmp.html', clone(assertFileExists), TEMPHTMLFILE_DEFAULT)  
 	.parse(process.argv);
     
-    writeURLToTmp(URL_DEFAULT);
-
     var checkJson = checkHtmlFile(program.file, program.checks);
     var outJson = JSON.stringify(checkJson, null, 4);
     console.log(outJson);
